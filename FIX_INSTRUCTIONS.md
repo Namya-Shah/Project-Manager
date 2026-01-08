@@ -1,3 +1,5 @@
+Use this whenever fix needed
+
 # How to Apply the Database Fix
 
 The `DATABASE_FIX.sql` file contains the necessary SQL commands to fix the missing columns and reload the schema cache.
