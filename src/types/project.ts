@@ -5,6 +5,8 @@ export interface DailyLog {
   createdAt: string;
   userId?: string;
   userEmail?: string;
+  userName?: string;
+  avatarUrl?: string;
 }
 
 export interface Project {
@@ -15,7 +17,7 @@ export interface Project {
   createdAt: string;
   ownerId: string;
   ownerEmail?: string;
-  groupId: string;
+  groupId?: string | null;
   logs: DailyLog[];
   members?: ProjectMember[];
 }
@@ -25,7 +27,9 @@ export interface ProjectMember {
   userId: string;
   email: string;
   fullName?: string;
-  role: 'owner' | 'editor' | 'viewer';
+  avatarUrl?: string;
+  activityStatus?: string;
+  role: 'admin' | 'owner' | 'editor' | 'viewer';
   joinedAt: string;
 }
 

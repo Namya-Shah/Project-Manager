@@ -1,53 +1,90 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { DailyLog } from '@/types/project';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { format, subDays, startOfWeek, addDays } from 'date-fns';
 
 interface ContributionGraphProps {
   logs: DailyLog[];
-  weeks?: number;
+  weeks?: number; // Optional: Force a specific number of weeks, otherwise responsive
 }
 
-const ContributionGraph = ({ logs, weeks = 20 }: ContributionGraphProps) => {
+const BLOCK_SIZE = 10;
+const BLOCK_GAP = 3;
+const WEEK_WIDTH = BLOCK_SIZE + BLOCK_GAP;
+const DESC_WIDTH = 30; // Width reserved for Mon/Wed/Fri labels
+
+const ContributionGraph = ({ logs, weeks: forcedWeeks }: ContributionGraphProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [availableWeeks, setAvailableWeeks] = useState(52);
+
+  // Responsive calculation
+  useEffect(() => {
+    if (forcedWeeks) {
+      setAvailableWeeks(forcedWeeks);
+      return;
+    }
+
+    const updateWidth = () => {
+      if (containerRef.current) {
+        const width = containerRef.current.clientWidth;
+        // Calculate how many weeks fit: (Total Width - Label Width) / (Block + Gap)
+        const fitWeeks = Math.floor((width - DESC_WIDTH) / WEEK_WIDTH);
+        // Ensure at least 4 weeks, max 52
+        setAvailableWeeks(Math.max(4, Math.min(52, fitWeeks)));
+      }
+    };
+
+    // Initial calcs
+    updateWidth();
+
+    // Observer
+    const resizeObserver = new ResizeObserver(updateWidth);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, [forcedWeeks]);
+
   const { grid, monthLabels } = useMemo(() => {
     const today = new Date();
-    const startDate = startOfWeek(subDays(today, weeks * 7), { weekStartsOn: 0 });
-    
+    // We want the last week to be the current week. 
+    // So we go back (availableWeeks - 1) weeks from the start of the current week.
+    const currentWeekStart = startOfWeek(today, { weekStartsOn: 0 });
+    const startDate = subDays(currentWeekStart, (availableWeeks - 1) * 7);
+
     // Create a map of dates to log counts
     const logMap = new Map<string, number>();
     logs.forEach((log) => {
       const count = logMap.get(log.date) || 0;
       logMap.set(log.date, count + 1);
     });
-    
+
     // Generate grid data
     const gridData: { date: Date; count: number; dateStr: string }[][] = [];
-    const months: { label: string; col: number }[] = [];
-    let currentMonth = '';
-    
-    for (let week = 0; week < weeks; week++) {
+    const months: { label: string; weekIndex: number }[] = [];
+
+    for (let week = 0; week < availableWeeks; week++) {
       const weekData: { date: Date; count: number; dateStr: string }[] = [];
-      
+
       for (let day = 0; day < 7; day++) {
         const date = addDays(startDate, week * 7 + day);
         const dateStr = format(date, 'yyyy-MM-dd');
         const count = logMap.get(dateStr) || 0;
-        
-        // Track month labels
-        const monthLabel = format(date, 'MMM');
-        if (monthLabel !== currentMonth && day === 0) {
-          months.push({ label: monthLabel, col: week });
-          currentMonth = monthLabel;
+
+        // Label alignment: Check if this week contains the 1st of the month
+        if (date.getDate() === 1) {
+          months.push({ label: format(date, 'MMM'), weekIndex: week });
         }
-        
+
         weekData.push({ date, count, dateStr });
       }
-      
+
       gridData.push(weekData);
     }
-    
+
     return { grid: gridData, monthLabels: months };
-  }, [logs, weeks]);
+  }, [logs, availableWeeks]);
 
   const getActivityLevel = (count: number) => {
     if (count === 0) return 'bg-activity-none';
@@ -60,37 +97,41 @@ const ContributionGraph = ({ logs, weeks = 20 }: ContributionGraphProps) => {
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
-    <div className="overflow-x-auto">
-      <div className="inline-block min-w-fit">
+    <div className="w-full" ref={containerRef}>
+      <div className="inline-block">
         {/* Month labels */}
-        <div className="flex mb-1 ml-8">
+        {/* We use a relative container shifted by DESC_WIDTH to align exactly with the grid */}
+        <div className="flex mb-1 relative h-4" style={{ marginLeft: `${DESC_WIDTH}px` }}>
           {monthLabels.map((month, idx) => (
             <div
-              key={idx}
-              className="text-xs text-muted-foreground font-mono"
-              style={{ 
-                marginLeft: idx === 0 ? `${month.col * 14}px` : `${(month.col - (monthLabels[idx - 1]?.col || 0) - 1) * 14}px`
+              key={`${month.label}-${idx}`}
+              className="absolute text-xs text-muted-foreground font-mono"
+              style={{
+                left: `${month.weekIndex * WEEK_WIDTH}px`,
               }}
             >
               {month.label}
             </div>
           ))}
         </div>
-        
+
         <div className="flex gap-1">
-          {/* Day labels */}
-          <div className="flex flex-col gap-[3px] mr-1">
+          {/* Day labels column */}
+          <div
+            className="flex flex-col gap-[3px] pr-2 pt-[0px]"
+            style={{ width: `${DESC_WIDTH}px` }}
+          >
             {dayLabels.map((day, idx) => (
               <div
                 key={day}
-                className="h-[10px] text-[10px] text-muted-foreground font-mono leading-[10px]"
+                className="h-[10px] text-[9px] text-muted-foreground font-mono leading-[10px] text-right"
                 style={{ visibility: idx % 2 === 1 ? 'visible' : 'hidden' }}
               >
                 {day}
               </div>
             ))}
           </div>
-          
+
           {/* Grid */}
           <div className="flex gap-[3px]">
             {grid.map((week, weekIdx) => (
@@ -116,9 +157,9 @@ const ContributionGraph = ({ logs, weeks = 20 }: ContributionGraphProps) => {
             ))}
           </div>
         </div>
-        
+
         {/* Legend */}
-        <div className="flex items-center gap-2 mt-3 ml-8">
+        <div className="flex items-center gap-2 mt-3 justify-end">
           <span className="text-xs text-muted-foreground font-mono">Less</span>
           <div className="flex gap-[3px]">
             <div className="w-[10px] h-[10px] rounded-[2px] bg-activity-none" />

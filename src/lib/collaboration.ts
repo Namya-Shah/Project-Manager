@@ -74,14 +74,31 @@ export async function addProjectMember(
   email: string,
   role: 'editor' | 'viewer' = 'editor'
 ): Promise<void> {
-  // First, get user ID by email
+  // First, check if user exists in the app (has an account)
   const { data: userData, error: userError } = await supabase
     .from('profiles')
-    .select('id')
-    .eq('email', email)
+    .select('id, email')
+    .eq('email', email.toLowerCase().trim())
     .single()
 
-  if (userError) throw new Error(`User with email ${email} not found`)
+  if (userError || !userData) {
+    throw new Error(
+      `User with email ${email} does not have an account in this app. ` +
+      `They must sign up first before they can be added to the project.`
+    )
+  }
+
+  // Check if user is already a member
+  const { data: existingMember } = await supabase
+    .from('project_members')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('user_id', userData.id)
+    .single()
+
+  if (existingMember) {
+    throw new Error(`User with email ${email} is already a member of this project`)
+  }
 
   // Add member to project
   const { error } = await supabase

@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Copy, Share2, Loader2 } from 'lucide-react'
+import { Copy, Share2, Loader2, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { validateGroupId } from '@/lib/projects'
 
 interface GroupIdSectionProps {
   groupId?: string
@@ -31,6 +32,27 @@ export function GroupIdSection({ groupId, onJoinGroup, isJoining = false }: Grou
       toast({
         title: 'Error',
         description: 'Please enter a group ID',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Validate format (should be 6 characters)
+    if (joinGroupId.trim().length !== 6) {
+      toast({
+        title: 'Error',
+        description: 'Group ID must be exactly 6 characters',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Check existence in DB before attempting to join
+    const exists = await validateGroupId(joinGroupId)
+    if (!exists) {
+      toast({
+        title: 'Error',
+        description: 'Group ID not found. Please check the ID and try again.',
         variant: 'destructive',
       })
       return
